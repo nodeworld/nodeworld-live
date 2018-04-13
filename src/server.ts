@@ -14,7 +14,7 @@ interface NodeworldSocket extends Socket {
     visitor: Visitor;
 }
 
-const redis = new ioredis();
+const redis = new ioredis(process.env.REDIS_ENDPOINT);
 
 io.on("connection", async (socket: NodeworldSocket) => {
     const { node, subnode } = socket.handshake.query;
@@ -28,10 +28,11 @@ io.on("connection", async (socket: NodeworldSocket) => {
         messageLoop();
     });
 
-    try {   // Connection protocol
+    // Connection protocol
+    try {
         // Authenticate visitor
         if(!auth_token) throw new Error("Not logged in.");
-        const visitor = readToken(auth_token) as Visitor;
+        const visitor = await readToken(auth_token) as Visitor;
         socket.visitor = visitor;
         console.log(`${visitor.name} joined node ${channel}`);
     
@@ -55,7 +56,10 @@ io.on("connection", async (socket: NodeworldSocket) => {
         socket.emit("message", systemMessage(`Failed to join node. Reason: ${err.message}`));
     }
 
+    // Upon disconnect, broadcast leaving message to all other visitors
     socket.on("disconnect", (reason: string) => {
+        if(!socket.visitor)
+            return;
         console.log(`${socket.visitor.name} left. Reason: ${reason}`);
         if(socket.visitor) socket.to(channel).emit("message", systemMessage(`${socket.visitor.name} left.`));
     });
