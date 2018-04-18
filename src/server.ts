@@ -32,10 +32,18 @@ const node_ns_protocol = async (name: string, query: string, next: Function) => 
 // @ts-ignore
 const node_ns = io.of(node_ns_protocol).on("connect", async (socket: NodeworldSocket) => {
     const local_ns = socket.nsp;
-    let name = socket.nsp.name.slice(1);
-    if(name.charAt(name.length-1) === "/") name = name.slice(0, -1);
+    const name = local_ns.name.slice(1, local_ns.name.charAt(local_ns.name.length-1) === "/" ? -1 : undefined);
     const cookies = cookie.parse(socket.handshake.headers.cookie);
     const auth_token = cookies["visitor_session"];
+
+    const getVisitors = () => {
+        let visitors: Visitor[] = [];
+        Object.keys(local_ns.sockets).forEach((key) => {
+            const socket = local_ns.sockets[key] as NodeworldSocket;
+            if(socket.visitor) visitors.push(socket.visitor);
+        });
+        return visitors;
+    }
 
     // Connection protocol
     try {
@@ -49,6 +57,15 @@ const node_ns = io.of(node_ns_protocol).on("connect", async (socket: NodeworldSo
         //Send personal greeting
         socket.emit("message", systemMessage(`Joined ${node.name}.`));
         if(node.greeting) socket.emit("message", systemMessage(node.greeting));
+
+        // Retrieve and display list of visitors in current node
+        let visitors = getVisitors();
+        if(socket.visitor) visitors = visitors.filter(v => v.id !== socket.visitor.id);
+        if(visitors.length) {
+            const names = visitors.map(v => v.name);
+            const mult = visitors.length > 1;
+            socket.emit("message", systemMessage(`There ${mult ? "are" : "is"} ${visitors.length} visitor${mult ? "s" : ""} in this node: ${names.join(", ")}`));
+        }
 
         // Broadcast entrance message to all other visitors
         if(socket.visitor) socket.broadcast.emit("message", systemMessage(`${socket.visitor.name} is here.`));
