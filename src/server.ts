@@ -19,9 +19,7 @@ const node_ns_protocol = async (name: string, query: string, next: Function) => 
     try {
         let node_name = name.slice(1);
         if(node_name.charAt(node_name.length-1) === "/") node_name = node_name.slice(0, -1);
-        console.log("connecting to " + node_name);
         const node = await getNode(node_name);
-        console.log("got node");
         next(null, true);
     } catch(e) {
         console.log(e.message);
@@ -54,18 +52,15 @@ const node_ns = io.of(node_ns_protocol).on("connect", async (socket: NodeworldSo
         // Retrieve node information
         const node = await getNode(name);   // TODO: Find a way to pass data through node_ns_protocol so I won't have to refetch node information twice
 
-        //Send personal greeting
+        // Send personal greeting
         socket.emit("message", systemMessage(`Joined ${node.name}.`));
         if(node.greeting) socket.emit("message", systemMessage(node.greeting));
 
-        // Retrieve and display list of visitors in current node
-        let visitors = getVisitors();
-        if(socket.visitor) visitors = visitors.filter(v => v.id !== socket.visitor.id);
-        if(visitors.length) {
-            const names = visitors.map(v => v.name);
-            const mult = visitors.length > 1;
-            socket.emit("message", systemMessage(`There ${mult ? "are" : "is"} ${visitors.length} visitor${mult ? "s" : ""} in this node: ${names.join(", ")}`));
-        }
+        // Retrieve and send list of visitors in current node
+        local_ns.emit("visitors", getVisitors());
+
+        // Let client know connection protocol is finished
+        socket.emit("joined");
 
         // Broadcast entrance message to all other visitors
         if(socket.visitor) socket.broadcast.emit("message", systemMessage(`${socket.visitor.name} is here.`));
@@ -76,8 +71,8 @@ const node_ns = io.of(node_ns_protocol).on("connect", async (socket: NodeworldSo
     // Disconnection protocol: broadcast leaving message to all other visitors
     socket.on("disconnect", (reason: string) => {
         console.log(`${socket.visitor ? socket.visitor.name : `guest ${socket.id}`} left. Reason: ${reason}`);
-        if(!socket.visitor) return;
         if(socket.visitor) local_ns.emit("message", systemMessage(`${socket.visitor.name} left.`));
+        local_ns.emit("visitors", getVisitors());
     });
 
     socket.on("error", (err: any) => {
