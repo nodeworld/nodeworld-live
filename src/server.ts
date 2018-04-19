@@ -11,10 +11,10 @@ import { readToken } from "./utils/jwt";
 
 interface NodeworldSocket extends Socket {
     ctx_node: { id: string, name: string; greeting?: string; }
-    visitor: Visitor;
+    visitor?: Visitor;
 }
 
-const redis = new ioredis(process.env.REDIS_ENDPOINT);
+const redis = new ioredis({ host: process.env.REDIS_ENDPOINT });
 const node_ns_protocol = async (name: string, query: string, next: Function) => {   // Checks if node exists first before handling connection
     try {
         let node_name = name.slice(1);
@@ -31,8 +31,6 @@ const node_ns_protocol = async (name: string, query: string, next: Function) => 
 const node_ns = io.of(node_ns_protocol).on("connect", async (socket: NodeworldSocket) => {
     const local_ns = socket.nsp;
     const name = local_ns.name.slice(1, local_ns.name.charAt(local_ns.name.length-1) === "/" ? -1 : undefined);
-    const cookies = cookie.parse(socket.handshake.headers.cookie);
-    const auth_token = cookies["visitor_session"];
 
     const getVisitors = () => {
         let visitors: Visitor[] = [];
@@ -43,10 +41,16 @@ const node_ns = io.of(node_ns_protocol).on("connect", async (socket: NodeworldSo
         return visitors;
     }
 
+    const authenticateSocket = async (s: NodeworldSocket): Promise<Visitor> => {
+        const cookies = cookie.parse(s.handshake.headers.cookie);
+        const token = cookies["visitor_session"];
+        if(token) return await readToken(token); else throw new Error("Undefined token.");
+    }
+
     // Connection protocol
     try {
         // Read and assign auth info if token present
-        if(auth_token) socket.visitor = await readToken(auth_token) as Visitor;
+        try { socket.visitor = await authenticateSocket(socket); } catch { }
         console.log(`${socket.visitor ? socket.visitor.name : `guest ${socket.id}`} joined node ${name}`);
 
         // Retrieve node information
@@ -68,6 +72,19 @@ const node_ns = io.of(node_ns_protocol).on("connect", async (socket: NodeworldSo
         socket.emit("message", systemMessage(`Failed to join node. Reason: ${err.message}`));
     }
 
+    // Login protocol: attempt to reauthenticate and update connected list
+    socket.on("login", async () => {
+        try {
+            socket.visitor = await authenticateSocket(socket);
+            local_ns.emit("visitors", getVisitors());
+        } catch { }
+    });
+
+    socket.on("logout", async () => {
+        socket.visitor = undefined;
+        local_ns.emit("visitors", getVisitors());
+    });
+
     // Disconnection protocol: broadcast leaving message to all other visitors
     socket.on("disconnect", (reason: string) => {
         console.log(`${socket.visitor ? socket.visitor.name : `guest ${socket.id}`} left. Reason: ${reason}`);
@@ -75,6 +92,7 @@ const node_ns = io.of(node_ns_protocol).on("connect", async (socket: NodeworldSo
         local_ns.emit("visitors", getVisitors());
     });
 
+    // Error protocol: standard error-handling
     socket.on("error", (err: any) => {
         console.log(err);
     });
