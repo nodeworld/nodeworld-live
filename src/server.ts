@@ -102,7 +102,7 @@ const node_ns = io.of(node_ns_protocol).on("connect", async (socket: NodeworldSo
 const messageLoop = () => (redis as any).brpop("node:message", 0, (err: any, data: any) => {
     const parsed_data = JSON.parse(data[1]);
     console.log(`${parsed_data["message"].name}: ${parsed_data["message"].content}`);
-    io.to(parsed_data.node).emit("message", JSON.parse(data[1])["message"]);
+    io.of(`/${parsed_data.node}`).emit("message", parsed_data.message);
     messageLoop();
 });
 messageLoop();
