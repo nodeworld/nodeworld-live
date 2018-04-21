@@ -1,5 +1,4 @@
 import * as ioredis from "ioredis";
-import * as cookie from "cookie";
 
 import { Socket } from "socket.io";
 
@@ -42,15 +41,14 @@ const node_ns = io.of(node_ns_protocol).on("connect", async (socket: NodeworldSo
     }
 
     const authenticateSocket = async (s: NodeworldSocket): Promise<Visitor> => {
-        const cookies = cookie.parse(s.handshake.headers.cookie);
-        const token = cookies["visitor_session"];
+        const token = s.request.signedCookies["visitor_session"];
         if(token) return await readToken(token); else throw new Error("Undefined token.");
     }
 
     // Connection protocol
     try {
         // Read and assign auth info if token present
-        try { socket.visitor = await authenticateSocket(socket); } catch { }
+        try { socket.visitor = await authenticateSocket(socket); } catch(e) { }
         console.log(`${socket.visitor ? socket.visitor.name : `guest ${socket.id}`} joined node ${name}`);
 
         // Retrieve node information
