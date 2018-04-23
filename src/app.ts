@@ -1,17 +1,18 @@
+import * as cors from "cors";
 import * as express from "express";
 import * as http from "http";
 import * as socket from "socket.io";
-import * as cors from "cors";
 
-const cookie_parser = require("socket.io-cookie-parser");
+// tslint:disable-next-line:no-var-requires
+const cookieParser = require("socket.io-cookie-parser");
 
-const express_app = express();
+const expressApp = express();
 
-express_app.use(cors({ origin: "http://localhost:3000", credentials: true }));
+expressApp.use(cors({ origin: "http://localhost:3000", credentials: true }));
 
-const http_app = new http.Server(express_app);
-const io = socket(http_app, { path: "/" });
+const httpApp = new http.Server(expressApp);
+const io = socket(httpApp, { path: "/" });
 
-io.use(cookie_parser(process.env.TOKEN_SECRET));
+io.use(cookieParser(process.env.TOKEN_SECRET));
 
-export { io, http_app as app }
+export { io, httpApp as app };
