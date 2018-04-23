@@ -1,9 +1,10 @@
 import { app } from "./app";
 
-require("./server");
+import "./server";
+import { logger } from "./utils/log";
 
 const PORT = process.env.PORT || "4000";
 
 app.listen(PORT, () => {
-    console.log(`Nodeworld Live is now listening on localhost:${PORT}...`);
+    logger.info(`Nodeworld Live is now listening on localhost:${PORT}...`);
 });
